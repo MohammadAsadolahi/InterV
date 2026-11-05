@@ -52,7 +52,7 @@ jobs:
           echo "Destination files staged:"
           git ls-files | wc -l
           test "$(git -C "$RUNNER_TEMP/nexq-source" ls-files | wc -l)" -eq "$(git ls-files | wc -l)"
-          git diff --cached --check
+          # Keep upstream formatting unchanged, including intentional trailing whitespace.
 
       - name: Commit imported source
         shell: bash
