@@ -1,0 +1,64 @@
+# Temporary one-time import workflow. It removes itself after importing.
+# Source: https://github.com/naxhq/NexQ (MIT license).
+name: Import NexQ source into InterV
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/import-nexq.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: interv-nexq-import
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out InterV
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Clone pinned NexQ snapshot
+        env:
+          NEXQ_COMMIT: 9927520d24634d2a2380a44115dddaff33c691a4
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --no-checkout --depth 1 https://github.com/naxhq/NexQ.git "$RUNNER_TEMP/nexq-source"
+          git -C "$RUNNER_TEMP/nexq-source" checkout --detach "$NEXQ_COMMIT"
+          git -C "$RUNNER_TEMP/nexq-source" rev-parse HEAD
+
+      - name: Replace InterV working tree with full NexQ tracked snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm -r --ignore-unmatch .
+          # Restore every NexQ-tracked file, including binaries and mode bits.
+          # Do not import NexQ's own .git metadata.
+          git -C "$RUNNER_TEMP/nexq-source" ls-files -z | while IFS= read -r -d '' file; do
+            mkdir -p "$(dirname "$file")"
+            cp -p "$RUNNER_TEMP/nexq-source/$file" "$file"
+          done
+          git add -A
+          echo "Source files:"
+          git -C "$RUNNER_TEMP/nexq-source" ls-files | wc -l
+          echo "Destination files staged:"
+          git ls-files | wc -l
+          test "$(git -C "$RUNNER_TEMP/nexq-source" ls-files | wc -l)" -eq "$(git ls-files | wc -l)"
+          git diff --cached --check
+
+      - name: Commit imported source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Import NexQ v2.34.0 source (MIT; upstream 9927520d)"
+          git push origin HEAD:main
