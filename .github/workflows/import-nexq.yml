@@ -39,10 +39,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git rm -r --ignore-unmatch .
-          # Restore every NexQ-tracked file, including binaries and mode bits.
-          # Do not import NexQ's own .git metadata.
+          # Preserve this one-time workflow: GitHub's runner token is not
+          # authorized to modify any .github/workflows paths.
+          # Import the other original tracked files exactly, preserving modes.
           git -C "$RUNNER_TEMP/nexq-source" ls-files -z | while IFS= read -r -d '' file; do
+            case "$file" in .github/workflows/*) continue ;; esac
             mkdir -p "$(dirname "$file")"
             cp -p "$RUNNER_TEMP/nexq-source/$file" "$file"
           done
@@ -51,7 +52,9 @@ jobs:
           git -C "$RUNNER_TEMP/nexq-source" ls-files | wc -l
           echo "Destination files staged:"
           git ls-files | wc -l
-          test "$(git -C "$RUNNER_TEMP/nexq-source" ls-files | wc -l)" -eq "$(git ls-files | wc -l)"
+          # Four upstream workflow files will be added through the GitHub
+          # connection after this push; our temporary import workflow remains.
+          test "$(( $(git -C "$RUNNER_TEMP/nexq-source" ls-files | wc -l) - 4 + 1 ))" -eq "$(git ls-files | wc -l)"
           # Keep upstream formatting unchanged, including intentional trailing whitespace.
 
       - name: Commit imported source
